@@ -1,51 +1,59 @@
 import streamlit as st
 import pandas as pd
 import random
+import re
 
 st.set_page_config(page_title="영어 단어 시험지 제작기", layout="wide")
 
-# 세션 상태 초기화
 if "words_df" not in st.session_state:
     st.session_state.words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
 
 st.title("📝 맞춤형 영어 단어 시험지 제작기")
-st.caption("단어 직접 입력 또는 엑셀 업로드로 빠르게 시험지를 만들어보세요.")
 
-# --- SIDEBAR: 입력 및 설정 ---
 with st.sidebar:
     st.header("1. 단어 데이터 입력")
     input_type = st.radio("입력 방식을 선택하세요:", ["직접 입력", "엑셀 파일 업로드"])
     
-    # 1) 직접 입력 (뜻 없이 단어만 써도 OK)
     if input_type == "직접 입력":
         raw_text = st.text_area(
-            "단어(또는 '단어 - 뜻')를 한 줄씩 입력하세요",
-            height=200,
-            value="apple - 사과\ndifficult\nbanana\nelegantly - 우아하게"
+            "단어를 입력하세요 (한 줄에 여러 개도 OK!)",
+            height=250,
+            value=""
         )
         if st.button("단어 목록에 반영"):
             lines = raw_text.strip().split("\n")
             data = []
+            
             for line in lines:
                 line = line.strip()
                 if not line:
                     continue
                 
-                # 구분자 처리 (하이픈, 콜론 등)
-                if "-" in line:
-                    eng, kor = line.split("-", 1)
-                elif ":" in line:
-                    eng, kor = line.split(":", 1)
-                else:
-                    eng = line
-                    kor = ""  # 뜻이 없는 경우 빈칸 처리
+                # '1. provide 21. aim' 처럼 한 줄에 여러 단어가 있는 경우 분리
+                # 숫자. 패턴을 기준으로 단어 나눔
+                items = re.split(r'\s+(?=\d+\.)', line)
+                
+                for item in items:
+                    item = item.strip()
+                    # 맨 앞의 번호(예: '1. ', '21. ') 제거
+                    clean_item = re.sub(r'^\d+\.\s*', '', item)
                     
-                data.append({"영어 단어": eng.strip(), "한국어 뜻": kor.strip()})
+                    if not clean_item:
+                        continue
+                        
+                    if "-" in clean_item:
+                        eng, kor = clean_item.split("-", 1)
+                    elif ":" in clean_item:
+                        eng, kor = clean_item.split(":", 1)
+                    else:
+                        eng = clean_item
+                        kor = ""
+                        
+                    data.append({"영어 단어": eng.strip(), "한국어 뜻": kor.strip()})
                 
             st.session_state.words_df = pd.DataFrame(data)
             st.success(f"{len(data)}개 단어 반영 완료!")
 
-    # 2) 엑셀 업로드
     elif input_type == "엑셀 파일 업로드":
         uploaded_file = st.file_uploader("엑셀 (.xlsx, .csv) 파일을 업로드하세요", type=["xlsx", "csv"])
         if uploaded_file is not None:
@@ -76,7 +84,6 @@ with st.sidebar:
     else:
         max_q = 0
 
-# --- MAIN CONTENT ---
 tab1, tab2 = st.tabs(["📄 시험지 생성", "📚 단어장 확인"])
 
 with tab2:
