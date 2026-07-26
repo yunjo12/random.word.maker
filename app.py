@@ -72,28 +72,30 @@ def generate_print_html(df, title, is_answer=False):
     """
     return html_content
 
-# 세션 상태 초기화 (누적 단어 데이터프레임)
+# 세션 상태 초기화 (누적 단어 및 현재 입력 단어)
 if "words_df" not in st.session_state:
     st.session_state.words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
+if "current_words_df" not in st.session_state:
+    st.session_state.current_words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
 
 st.title("📝 맞춤형 영어 단어 시험지 제작기")
 
 # --- SIDEBAR: 입력 및 설정 ---
 with st.sidebar:
-    st.header("1. 단어 데이터 추가")
+    st.header("1. 단어 데이터 입력")
     input_type = st.radio("입력 방식을 선택하세요:", ["직접 입력", "엑셀 파일 업로드"])
     
     if input_type == "직접 입력":
         raw_text = st.text_area(
-            "단어를 입력하세요 (한 줄에 하나 또는 '1. apple 21. aim' 형태 가능)",
+            "단어를 입력하세요",
             height=200,
             value=""
         )
-        if st.button("➕ 누적 단어장에 추가"):
+        if st.button("📥 단어 반영 (중복 시 덮어쓰기)"):
             lines = raw_text.strip().split("\n")
             new_data = []
             
-            with st.spinner("단어 뜻을 자동으로 검색하여 수집 중..."):
+            with st.spinner("단어 뜻을 자동으로 검색 중..."):
                 for line in lines:
                     line = line.strip()
                     if not line:
@@ -122,14 +124,19 @@ with st.sidebar:
                 
             if new_data:
                 new_df = pd.DataFrame(new_data)
-                # 기존 누적 데이터와 합치기 (중복 제거)
+                
+                # 1) 방금 입력한 단어 보관
+                st.session_state.current_words_df = new_df
+                
+                # 2) 누적 단어장에 합치기 (중복 시 새로 입력한 값으로 덮어쓰기)
                 combined = pd.concat([st.session_state.words_df, new_df], ignore_index=True)
-                st.session_state.words_df = combined.drop_duplicates(subset=["영어 단어"]).reset_index(drop=True)
-                st.success(f"{len(new_data)}개 단어가 단어장에 추가되었습니다!")
+                st.session_state.words_df = combined.drop_duplicates(subset=["영어 단어"], keep="last").reset_index(drop=True)
+                
+                st.success(f"{len(new_data)}개 단어가 반영되었습니다!")
 
     elif input_type == "엑셀 파일 업로드":
         uploaded_file = st.file_uploader("엑셀 (.xlsx, .csv) 파일을 업로드하세요", type=["xlsx", "csv"])
-        if uploaded_file is not None and st.button("📥 엑셀 단어 추가"):
+        if uploaded_file is not None and st.button("📥 엑셀 단어 반영"):
             try:
                 if uploaded_file.name.endswith('.csv'):
                     df = pd.read_csv(uploaded_file)
@@ -144,20 +151,31 @@ with st.sidebar:
                         if not str(row["한국어 뜻"]).strip():
                             df.at[idx, "한국어 뜻"] = translate_word(str(row["영어 단어"]))
                             
+                st.session_state.current_words_df = df
                 combined = pd.concat([st.session_state.words_df, df], ignore_index=True)
-                st.session_state.words_df = combined.drop_duplicates(subset=["영어 단어"]).reset_index(drop=True)
-                st.success("엑셀 단어가 누적 단어장에 추가되었습니다!")
+                st.session_state.words_df = combined.drop_duplicates(subset=["영어 단어"], keep="last").reset_index(drop=True)
+                st.success("엑셀 단어가 반영되었습니다!")
             except Exception as e:
                 st.error("파일을 읽는 중 오류가 발생했습니다.")
 
     st.markdown("---")
     st.header("2. 시험지 출제 옵션")
+    
+    # 출제 범위 선택 (방금 입력한 단어 VS 누적 단어 전체)
+    test_target = st.radio(
+        "출제할 단어 범위:",
+        ["방금 입력한 단어만", "누적 전체 단어장"]
+    )
+    
     test_direction = st.selectbox(
         "시험 방향 선택:",
         ["영어 → 한국어 (기본)", "한국어 → 영어", "혼합형"]
     )
     
-    word_count = len(st.session_state.words_df)
+    # 선택된 범위에 맞게 데이터 세팅
+    target_df = st.session_state.current_words_df if test_target == "방금 입력한 단어만" else st.session_state.words_df
+    
+    word_count = len(target_df)
     if word_count > 0:
         max_q = st.number_input("출제 문제 수 설정", min_value=1, max_value=word_count, value=word_count)
     else:
@@ -168,10 +186,9 @@ tab1, tab2 = st.tabs(["📄 시험지 생성 및 인쇄", "📚 전체 단어장
 
 # --- TAB 2: 단어장 정리 및 관리 ---
 with tab2:
-    st.subheader(f"📚 지금까지 입력한 단어 목록 (총 {len(st.session_state.words_df)}개)")
+    st.subheader(f"📚 지금까지 누적된 단어 목록 (총 {len(st.session_state.words_df)}개)")
     
     if not st.session_state.words_df.empty:
-        # 단어장 편집 기능 (데이터프레임 수정 가능)
         edited_df = st.data_editor(
             st.session_state.words_df,
             num_rows="dynamic",
@@ -182,7 +199,6 @@ with tab2:
         
         col1, col2 = st.columns(2)
         with col1:
-            # 엑셀 다운로드
             csv = st.session_state.words_df.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
                 label="📥 단어장 전체 CSV로 저장하기",
@@ -193,17 +209,21 @@ with tab2:
         with col2:
             if st.button("🗑️ 단어장 전체 비우기 (초기화)"):
                 st.session_state.words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
-                st.experimental_rerun()
+                st.session_state.current_words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
+                st.rerun()
     else:
-        st.info("아직 입력된 단어가 없습니다. 왼쪽 사이드바에서 단어를 추가해 보세요.")
+        st.info("아직 입력된 단어가 없습니다.")
 
 # --- TAB 1: 시험지 생성 및 인쇄 ---
 with tab1:
-    if st.session_state.words_df.empty:
-        st.warning("먼저 단어를 입력하여 단어장을 채워주세요.")
+    target_df = st.session_state.current_words_df if test_target == "방금 입력한 단어만" else st.session_state.words_df
+    
+    if target_df.empty:
+        st.warning("선택한 범위에 단어가 없습니다. 사이드바에서 단어를 먼저 입력해 주세요.")
     else:
+        st.info(f"현재 선택된 출제 범위: **{test_target}** (총 {len(target_df)}개 중 {max_q}개 출제)")
         if st.button("🎲 단어 랜덤 섞기 & 시험지 생성", type="primary"):
-            sample_df = st.session_state.words_df.sample(n=max_q).reset_index(drop=True)
+            sample_df = target_df.sample(n=max_q).reset_index(drop=True)
             
             quiz_data = []
             answer_data = []
@@ -233,11 +253,8 @@ with tab1:
         if "quiz_df" in st.session_state:
             st.markdown("---")
             st.subheader("📝 영어 단어 시험지 미리보기")
-            st.text(f"범위: 전 범위 | 문제 수: {len(st.session_state.quiz_df)}문제")
-            
             st.table(st.session_state.quiz_df)
             
-            # 인쇄 전용 다운로드 버튼 (A4 출력)
             st.markdown("### 🖨️ 깔끔한 A4 시험지 인쇄하기")
             print_html_quiz = generate_print_html(st.session_state.quiz_df, "영어 단어 시험지", is_answer=False)
             st.download_button(
