@@ -2,27 +2,48 @@ import streamlit as st
 import pandas as pd
 import random
 import re
+from deep_translator import GoogleTranslator
 
 st.set_page_config(page_title="영어 단어 시험지 제작기", layout="wide")
 
-# --- A4 인쇄용 스타일 적용 (인쇄 시 사이드바 및 버튼 숨김) ---
+# --- A4 인쇄 전용 CSS (인쇄 시 배경 흰색 고정 및 불필요한 UI 숨김) ---
 st.markdown("""
     <style>
     @media print {
+        body, .stApp, div {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
         [data-testid="stSidebar"], 
         header, 
         footer, 
         .stButton, 
+        .stTabs,
         [data-testid="stHeader"] {
             display: none !important;
         }
         .main .block-container {
             padding: 0 !important;
             margin: 0 !important;
+            width: 100% !important;
+        }
+        table, th, td {
+            color: #000000 !important;
+            border-color: #cccccc !important;
+            background-color: #ffffff !important;
         }
     }
     </style>
 """, unsafe_allow_html=True)
+
+# 자동 번역 함수
+@st.cache_data(show_spinner=False)
+def translate_word(word):
+    try:
+        translated = GoogleTranslator(source='en', target='ko').translate(word)
+        return translated
+    except Exception:
+        return ""
 
 if "words_df" not in st.session_state:
     st.session_state.words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
@@ -36,7 +57,7 @@ with st.sidebar:
     
     if input_type == "직접 입력":
         raw_text = st.text_area(
-            "단어를 입력하세요 (줄바꿈/한 줄 여러 개 모두 가능)",
+            "단어를 입력하세요 (단어만 적어도 뜻이 자동 생성됩니다)",
             height=250,
             value=""
         )
@@ -44,31 +65,34 @@ with st.sidebar:
             lines = raw_text.strip().split("\n")
             data = []
             
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                
-                # '1. provide 21. aim' 형태 자동 분리
-                items = re.split(r'\s+(?=\d+\.)', line)
-                
-                for item in items:
-                    item = item.strip()
-                    # 앞에 붙은 번호 제거
-                    clean_item = re.sub(r'^\d+\.\s*', '', item)
-                    
-                    if not clean_item:
+            with st.spinner("단어 뜻을 자동으로 검색 중입니다..."):
+                for line in lines:
+                    line = line.strip()
+                    if not line:
                         continue
+                    
+                    # '1. provide 21. aim' 형태 자동 분리
+                    items = re.split(r'\s+(?=\d+\.)', line)
+                    
+                    for item in items:
+                        item = item.strip()
+                        clean_item = re.sub(r'^\d+\.\s*', '', item)
                         
-                    if "-" in clean_item:
-                        eng, kor = clean_item.split("-", 1)
-                    elif ":" in clean_item:
-                        eng, kor = clean_item.split(":", 1)
-                    else:
-                        eng = clean_item
-                        kor = ""
-                        
-                    data.append({"영어 단어": eng.strip(), "한국어 뜻": kor.strip()})
+                        if not clean_item:
+                            continue
+                            
+                        if "-" in clean_item:
+                            eng, kor = clean_item.split("-", 1)
+                            eng, kor = eng.strip(), kor.strip()
+                        elif ":" in clean_item:
+                            eng, kor = clean_item.split(":", 1)
+                            eng, kor = eng.strip(), kor.strip()
+                        else:
+                            eng = clean_item.strip()
+                            # 뜻이 직접 작성되지 않은 경우 자동 번역
+                            kor = translate_word(eng)
+                            
+                        data.append({"영어 단어": eng, "한국어 뜻": kor})
                 
             st.session_state.words_df = pd.DataFrame(data)
             st.success(f"{len(data)}개 단어 반영 완료!")
@@ -85,6 +109,12 @@ with st.sidebar:
                 if "한국어 뜻" not in df.columns:
                     df["한국어 뜻"] = ""
                     
+                # 엑셀 파일 내 빈 뜻 자동 채우기
+                with st.spinner("빈 뜻을 자동으로 채우는 중입니다..."):
+                    for idx, row in df.iterrows():
+                        if not str(row["한국어 뜻"]).strip():
+                            df.at[idx, "한국어 뜻"] = translate_word(str(row["영어 단어"]))
+                            
                 st.session_state.words_df = df
                 st.success("파일 업로드 성공!")
             except Exception as e:
@@ -106,8 +136,7 @@ with st.sidebar:
 tab1, tab2 = st.tabs(["📄 시험지 생성", "📚 단어장 확인"])
 
 with tab2:
-    st.subheader("현재 입력된 단어 목록")
-    # 1번부터 표시
+    st.subheader("현재 입력된 단어 목록 (자동 완성된 뜻 포함)")
     df_display = st.session_state.words_df.copy()
     df_display.index = range(1, len(df_display) + 1)
     st.dataframe(df_display, use_container_width=True)
@@ -123,7 +152,7 @@ with tab1:
             answer_data = []
             
             for idx, row in sample_df.iterrows():
-                q_num = idx + 1  # 1번부터 시작되도록 고정
+                q_num = idx + 1
                 eng = row.get("영어 단어", "")
                 kor = row.get("한국어 뜻", "")
                 
@@ -133,12 +162,11 @@ with tab1:
                     
                 if "영어 → 한국어" in direction:
                     quiz_data.append({"번호": q_num, "영어 단어": eng, "뜻": ""})
-                    answer_data.append({"번호": q_num, "정답": f"{eng} - {kor}" if kor else eng})
                 else:
-                    quiz_data.append({"번호": q_num, "한국어 뜻": kor, "영어 단어": ""})
-                    answer_data.append({"번호": q_num, "정답": f"{kor} - {eng}" if kor else eng})
+                    quiz_data.append({"번호": q_num, "한국어 뜻": kor if kor else "뜻 없음", "영어 단어": ""})
                     
-            # 표의 인덱스도 1번부터 표시되도록 설정
+                answer_data.append({"번호": q_num, "정답": f"{eng} - {kor}" if kor else eng})
+                    
             q_df = pd.DataFrame(quiz_data).set_index("번호")
             a_df = pd.DataFrame(answer_data).set_index("번호")
             
@@ -154,6 +182,7 @@ with tab1:
             st.table(st.session_state.quiz_df)
             
             st.markdown("---")
+            # 정답지 섹션 (번호 + 영어/뜻 포함)
             with st.expander("🔑 정답지 보기 / 숨기기"):
-                st.subheader("정답지")
+                st.subheader("🔑 정답지")
                 st.table(st.session_state.answer_df)
