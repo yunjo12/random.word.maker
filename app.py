@@ -6,6 +6,64 @@ from deep_translator import GoogleTranslator
 
 st.set_page_config(page_title="맞춤형 영어 단어 시험지 제작기", layout="wide")
 
+# --- A4 2열(2줄) 인쇄 전용 CSS ---
+st.markdown("""
+    <style>
+    @media print {
+        /* 배경 흰색, 글자 검은색 고정 */
+        body, .stApp, div, iframe {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
+        /* 화면상의 UI(사이드바, 버튼, 헤더, 탭) 인쇄시 모두 숨김 */
+        [data-testid="stSidebar"], 
+        header, 
+        footer, 
+        .stButton, 
+        .stTabs,
+        .no-print,
+        [data-testid="stHeader"] {
+            display: none !important;
+        }
+        .main .block-container {
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+        }
+        /* 2열 레이아웃 스타일 설정 */
+        .print-container {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 20px !important;
+            width: 100% !important;
+        }
+        table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            margin-bottom: 10px !important;
+        }
+        th, td {
+            border: 1px solid #000000 !important;
+            padding: 6px 8px !important;
+            font-size: 13px !important;
+            color: #000000 !important;
+        }
+        th {
+            background-color: #f2f2f2 !important;
+        }
+    }
+    
+    /* 화면용 일반 스타일 */
+    .print-container {
+        display: flex;
+        gap: 20px;
+    }
+    .print-col {
+        flex: 1;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # 자동 번역 함수
 @st.cache_data(show_spinner=False)
 def translate_word(word):
@@ -15,64 +73,7 @@ def translate_word(word):
     except Exception:
         return ""
 
-# 인쇄용 HTML 문서 생성 함수
-def generate_print_html(df, title, is_answer=False):
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>{title}</title>
-        <style>
-            body {{ font-family: 'Malgun Gothic', sans-serif; padding: 20px; color: #000; }}
-            h2 {{ text-align: center; margin-bottom: 5px; }}
-            .sub-info {{ text-align: right; font-size: 13px; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-            th, td {{ border: 1px solid #333; padding: 10px 12px; text-align: left; font-size: 14px; }}
-            th {{ background-color: #f2f2f2; font-weight: bold; text-align: center; }}
-            .num-col {{ width: 10%; text-align: center; }}
-            @media print {{
-                body {{ padding: 0; }}
-                @page {{ size: A4; margin: 15mm; }}
-            }}
-        </style>
-    </head>
-    <body>
-        <h2>{title}</h2>
-        <div class="sub-info">
-            범위: 전 범위 | 문제 수: {len(df)}문제 | 점수: ____ / 100
-        </div>
-        <table>
-            <thead>
-                <tr>
-                    <th class="num-col">번호</th>
-                    {"<th>정답</th>" if is_answer else "<th>영어 단어</th><th>한국어 뜻 (작성)</th>"}
-                </tr>
-            </thead>
-            <tbody>
-    """
-    for idx, row in df.iterrows():
-        q_num = idx
-        if is_answer:
-            ans = row.get("정답", "")
-            html_content += f"<tr><td class='num-col'>{q_num}</td><td>{ans}</td></tr>"
-        else:
-            eng = row.get("영어 단어", "")
-            kor = row.get("뜻", "")
-            html_content += f"<tr><td class='num-col'>{q_num}</td><td>{eng}</td><td>{kor}</td></tr>"
-            
-    html_content += """
-            </tbody>
-        </table>
-        <script>
-            window.onload = function() { window.print(); }
-        </script>
-    </body>
-    </html>
-    """
-    return html_content
-
-# 세션 상태 초기화 (누적 단어 및 현재 입력 단어)
+# 세션 상태 초기화
 if "words_df" not in st.session_state:
     st.session_state.words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
 if "current_words_df" not in st.session_state:
@@ -124,14 +125,11 @@ with st.sidebar:
                 
             if new_data:
                 new_df = pd.DataFrame(new_data)
-                
-                # 1) 방금 입력한 단어 보관
                 st.session_state.current_words_df = new_df
                 
-                # 2) 누적 단어장에 합치기 (중복 시 새로 입력한 값으로 덮어쓰기)
+                # 누적 데이터에 중복 덮어쓰기로 합치기
                 combined = pd.concat([st.session_state.words_df, new_df], ignore_index=True)
                 st.session_state.words_df = combined.drop_duplicates(subset=["영어 단어"], keep="last").reset_index(drop=True)
-                
                 st.success(f"{len(new_data)}개 단어가 반영되었습니다!")
 
     elif input_type == "엑셀 파일 업로드":
@@ -161,7 +159,6 @@ with st.sidebar:
     st.markdown("---")
     st.header("2. 시험지 출제 옵션")
     
-    # 출제 범위 선택 (방금 입력한 단어 VS 누적 단어 전체)
     test_target = st.radio(
         "출제할 단어 범위:",
         ["방금 입력한 단어만", "누적 전체 단어장"]
@@ -172,7 +169,6 @@ with st.sidebar:
         ["영어 → 한국어 (기본)", "한국어 → 영어", "혼합형"]
     )
     
-    # 선택된 범위에 맞게 데이터 세팅
     target_df = st.session_state.current_words_df if test_target == "방금 입력한 단어만" else st.session_state.words_df
     
     word_count = len(target_df)
@@ -181,13 +177,11 @@ with st.sidebar:
     else:
         max_q = 0
 
-# --- MAIN TAB ---
+# --- MAIN CONTENT ---
 tab1, tab2 = st.tabs(["📄 시험지 생성 및 인쇄", "📚 전체 단어장 정리/관리"])
 
-# --- TAB 2: 단어장 정리 및 관리 ---
 with tab2:
     st.subheader(f"📚 지금까지 누적된 단어 목록 (총 {len(st.session_state.words_df)}개)")
-    
     if not st.session_state.words_df.empty:
         edited_df = st.data_editor(
             st.session_state.words_df,
@@ -200,28 +194,19 @@ with tab2:
         col1, col2 = st.columns(2)
         with col1:
             csv = st.session_state.words_df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📥 단어장 전체 CSV로 저장하기",
-                data=csv,
-                file_name="my_wordlist.csv",
-                mime="text/csv"
-            )
+            st.download_button("📥 단어장 전체 CSV 다운로드", csv, "my_wordlist.csv", "text/csv")
         with col2:
-            if st.button("🗑️ 단어장 전체 비우기 (초기화)"):
+            if st.button("🗑️ 단어장 전체 초기화"):
                 st.session_state.words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
                 st.session_state.current_words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
                 st.rerun()
-    else:
-        st.info("아직 입력된 단어가 없습니다.")
 
-# --- TAB 1: 시험지 생성 및 인쇄 ---
 with tab1:
     target_df = st.session_state.current_words_df if test_target == "방금 입력한 단어만" else st.session_state.words_df
     
     if target_df.empty:
-        st.warning("선택한 범위에 단어가 없습니다. 사이드바에서 단어를 먼저 입력해 주세요.")
+        st.warning("선택한 범위에 단어가 없습니다. 사이드바에서 단어를 입력해 주세요.")
     else:
-        st.info(f"현재 선택된 출제 범위: **{test_target}** (총 {len(target_df)}개 중 {max_q}개 출제)")
         if st.button("🎲 단어 랜덤 섞기 & 시험지 생성", type="primary"):
             sample_df = target_df.sample(n=max_q).reset_index(drop=True)
             
@@ -244,35 +229,45 @@ with tab1:
                     
                 answer_data.append({"번호": q_num, "정답": f"{eng} - {kor}" if kor else eng})
                     
-            q_df = pd.DataFrame(quiz_data).set_index("번호")
-            a_df = pd.DataFrame(answer_data).set_index("번호")
-            
-            st.session_state.quiz_df = q_df
-            st.session_state.answer_df = a_df
+            st.session_state.quiz_df = pd.DataFrame(quiz_data).set_index("번호")
+            st.session_state.answer_df = pd.DataFrame(answer_data).set_index("번호")
 
         if "quiz_df" in st.session_state:
             st.markdown("---")
             st.subheader("📝 영어 단어 시험지 미리보기")
-            st.table(st.session_state.quiz_df)
+            st.caption("💡 바로 인쇄(Ctrl + P)를 누르면 A4 종이에 깔끔하게 2열(2줄)로 출력됩니다!")
             
-            st.markdown("### 🖨️ 깔끔한 A4 시험지 인쇄하기")
-            print_html_quiz = generate_print_html(st.session_state.quiz_df, "영어 단어 시험지", is_answer=False)
-            st.download_button(
-                label="🖨️ [시험지] 클릭하여 깔끔하게 인쇄하기 (HTML)",
-                data=print_html_quiz,
-                file_name="word_test_sheet.html",
-                mime="text/html"
-            )
+            # 반으로 나누어 2열로 표시
+            df_quiz = st.session_state.quiz_df
+            half_len = (len(df_quiz) + 1) // 2
+            
+            col1_df = df_quiz.iloc[:half_len]
+            col2_df = df_quiz.iloc[half_len:]
+            
+            st.markdown(f"""
+            <div style="font-weight:bold; margin-bottom: 10px;">
+                범위: 전 범위 | 문제 수: {len(df_quiz)}문제 | 점수: ____ / 100
+            </div>
+            <div class="print-container">
+                <div class="print-col">
+                    {col1_df.to_html(escape=False)}
+                </div>
+                <div class="print-col">
+                    {col2_df.to_html(escape=False) if not col2_df.empty else ""}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
             
             st.markdown("---")
-            with st.expander("🔑 정답지 보기 / 인쇄하기"):
-                st.subheader("🔑 정답지 미리보기")
-                st.table(st.session_state.answer_df)
+            with st.expander("🔑 정답지 보기"):
+                st.subheader("🔑 정답지")
+                df_ans = st.session_state.answer_df
+                half_ans_len = (len(df_ans) + 1) // 2
+                ans_col1 = df_ans.iloc[:half_ans_len]
+                ans_col2 = df_ans.iloc[half_ans_len:]
                 
-                print_html_ans = generate_print_html(st.session_state.answer_df, "영어 단어 시험지 정답지", is_answer=True)
-                st.download_button(
-                    label="🖨️ [정답지] 클릭하여 깔끔하게 인쇄하기 (HTML)",
-                    data=print_html_ans,
-                    file_name="word_test_answer.html",
-                    mime="text/html"
-                )
+                st.markdown(f"""
+                <div class="print-container">
+                    <div class="print-col">
+                        {ans_col1.to_html(escape=False)}
+                    </div>
