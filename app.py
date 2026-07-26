@@ -146,10 +146,10 @@ st.title("📝 맞춤형 영어 단어 시험지 제작기")
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("1. 단어 데이터 입력")
-    input_type = st.radio("입력 방식을 선택하세요:", ["직접 입력", "엑셀 파일 업로드"])
+    input_type = st.radio("입력 방식을 선택하세요:", ["직접 입력 (목록/뜻)", "문장/글귀 통째로 입력", "엑셀 파일 업로드"])
     
-    if input_type == "직접 입력":
-        raw_text = st.text_area("단어를 입력하세요", height=200, value="")
+    if input_type == "직접 입력 (목록/뜻)":
+        raw_text = st.text_area("단어를 입력하세요 (예: apple - 사과)", height=200, value="")
         if st.button("📥 단어 반영 (중복 시 덮어쓰기)"):
             lines = raw_text.strip().split("\n")
             new_data = []
@@ -186,6 +186,31 @@ with st.sidebar:
                 combined = pd.concat([st.session_state.words_df, new_df], ignore_index=True)
                 st.session_state.words_df = combined.drop_duplicates(subset=["영어 단어"], keep="last").reset_index(drop=True)
                 st.success(f"{len(new_data)}개 단어가 반영되었습니다!")
+
+    elif input_type == "문장/글귀 통째로 입력":
+        raw_passage = st.text_area("영어 문장이나 긴 글을 붙여넣으세요", height=200, value="")
+        if st.button("✂️ 문장 분해하여 단어장에 추가"):
+            if raw_passage.strip():
+                # 영문 알파벳과 하이픈만 추출하여 단어 분해 (소문자 변환)
+                extracted_words = re.findall(r'\b[a-zA-A-Za-z-]+\b', raw_passage)
+                # 알파벳 2자 이상만 필터링 및 중복 제거
+                unique_words = sorted(list(set([w.lower() for w in extracted_words if len(w) > 1])))
+                
+                new_data = []
+                with st.spinner(f"총 {len(unique_words)}개 단어를 분해하고 뜻을 찾는 중..."):
+                    for w in unique_words:
+                        kor = translate_word(w)
+                        new_data.append({"영어 단어": w, "한국어 뜻": kor})
+                
+                if new_data:
+                    new_df = pd.DataFrame(new_data)
+                    st.session_state.current_words_df = new_df
+                    
+                    combined = pd.concat([st.session_state.words_df, new_df], ignore_index=True)
+                    st.session_state.words_df = combined.drop_duplicates(subset=["영어 단어"], keep="last").reset_index(drop=True)
+                    st.success(f"문장에서 총 {len(new_data)}개의 단어를 추출하여 저장했습니다!")
+            else:
+                st.warning("문장을 입력해 주세요.")
 
     elif input_type == "엑셀 파일 업로드":
         uploaded_file = st.file_uploader("엑셀 (.xlsx, .csv) 파일 업로드", type=["xlsx", "csv"])
@@ -269,7 +294,6 @@ with tab1:
             st.markdown("---")
             st.subheader("📝 영어 단어 시험지 (2열 배치)")
             
-            # 시험지 2열 인쇄 박스 렌더링
             quiz_html = build_print_html(st.session_state.quiz_df, "영어 단어 시험지", is_answer=False)
             components.html(quiz_html, height=600, scrolling=True)
             
