@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import random
+import google.generativeai as genai
+from PIL import Image
+import json
 
 st.set_page_config(page_title="영어 단어 시험지 제작기", layout="wide")
 
@@ -9,13 +12,14 @@ if "words_df" not in st.session_state:
     st.session_state.words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
 
 st.title("📝 맞춤형 영어 단어 시험지 제작기")
-st.caption("단어를 입력하고 클릭 몇 번으로 실제 학교 시험지 형태의 단어 시험지를 만들어보세요.")
+st.caption("단어 직접 입력, 엑셀 업로드, 사진 업로드로 쉽게 시험지를 만들어보세요.")
 
 # --- SIDEBAR: 입력 및 설정 ---
 with st.sidebar:
     st.header("1. 단어 데이터 입력")
-    input_type = st.radio("입력 방식을 선택하세요:", ["직접 입력", "엑셀 파일 업로드"])
+    input_type = st.radio("입력 방식을 선택하세요:", ["직접 입력", "사진 업로드 📸", "엑셀 파일 업로드"])
     
+    # 1) 직접 입력
     if input_type == "직접 입력":
         raw_text = st.text_area(
             "단어와 뜻을 입력하세요 (예: apple - 사과)",
@@ -31,7 +35,40 @@ with st.sidebar:
                     data.append({"영어 단어": eng.strip(), "한국어 뜻": kor.strip()})
             st.session_state.words_df = pd.DataFrame(data)
             st.success(f"{len(data)}개 단어 반영 완료!")
-            
+
+    # 2) 사진 업로드 (Gemini AI 활용)
+    elif input_type == "사진 업로드 📸":
+        api_key = st.text_input("Gemini API Key를 입력하세요", type="password")
+        uploaded_image = st.file_uploader("단어장/교재 사진을 올리세요", type=["jpg", "jpeg", "png"])
+        
+        if uploaded_image and api_key:
+            if st.button("사진에서 단어 추출하기"):
+                with st.spinner("AI가 사진 속 단어를 분석 중입니다..."):
+                    try:
+                        genai.configure(api_key=api_key)
+                        model = genai.GenerativeModel('gemini-2.5-flash')
+                        image = Image.open(uploaded_image)
+                        
+                        prompt = """
+                        이 이미지에서 영어 단어와 한국어 뜻을 추출해줘.
+                        반드시 아래와 같은 JSON 배열 형식으로만 응답해줘. 다른 설명은 제외해.
+                        [
+                          {"영어 단어": "apple", "한국어 뜻": "사과"},
+                          {"영어 단어": "banana", "한국어 뜻": "바나나"}
+                        ]
+                        """
+                        response = model.generate_content([image, prompt])
+                        clean_res = response.text.replace("```json", "").replace("```", "").strip()
+                        word_list = json.loads(clean_res)
+                        
+                        st.session_state.words_df = pd.DataFrame(word_list)
+                        st.success(f"{len(word_list)}개 단어를 사진에서 추출했습니다!")
+                    except Exception as e:
+                        st.error(f"단어 추출 실패: {e}")
+        elif uploaded_image and not api_key:
+            st.info("사진 분석을 위해 Google Gemini API Key가 필요합니다.")
+
+    # 3) 엑셀 업로드
     elif input_type == "엑셀 파일 업로드":
         uploaded_file = st.file_uploader("엑셀 (.xlsx, .csv) 파일을 업로드하세요", type=["xlsx", "csv"])
         if uploaded_file is not None:
@@ -70,10 +107,8 @@ with tab1:
         st.warning("왼쪽 사이드바에서 먼저 단어 데이터를 입력해주세요.")
     else:
         if st.button("🎲 새로운 시험지 만들기 (랜덤 섞기)", type="primary"):
-            # 데이터 추출 및 랜덤 섞기
             sample_df = st.session_state.words_df.sample(n=max_q).reset_index(drop=True)
             
-            # 시험지 데이터 프레임 구성
             quiz_data = []
             answer_data = []
             
@@ -82,7 +117,6 @@ with tab1:
                 eng = row["영어 단어"]
                 kor = row["한국어 뜻"]
                 
-                # 방향 설정 로직
                 direction = test_direction
                 if direction == "혼합형":
                     direction = random.choice(["영어 → 한국어 (기본)", "한국어 → 영어"])
@@ -97,13 +131,11 @@ with tab1:
             st.session_state.quiz_df = pd.DataFrame(quiz_data)
             st.session_state.answer_df = pd.DataFrame(answer_data)
 
-        # 생성된 시험지 표시
         if "quiz_df" in st.session_state:
             st.markdown("---")
             st.subheader("📝 영어 단어 시험지")
             st.text(f"범위: 전 범위 | 문제 수: {len(st.session_state.quiz_df)}문제 | 점수: ____ / 100")
             
-            # 시험지 표 출력
             st.table(st.session_state.quiz_df)
             
             st.markdown("---")
