@@ -5,18 +5,38 @@ import re
 
 st.set_page_config(page_title="영어 단어 시험지 제작기", layout="wide")
 
+# --- A4 인쇄용 스타일 적용 (인쇄 시 사이드바 및 버튼 숨김) ---
+st.markdown("""
+    <style>
+    @media print {
+        [data-testid="stSidebar"], 
+        header, 
+        footer, 
+        .stButton, 
+        [data-testid="stHeader"] {
+            display: none !important;
+        }
+        .main .block-container {
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 if "words_df" not in st.session_state:
     st.session_state.words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
 
 st.title("📝 맞춤형 영어 단어 시험지 제작기")
 
+# --- SIDEBAR: 입력 및 설정 ---
 with st.sidebar:
     st.header("1. 단어 데이터 입력")
     input_type = st.radio("입력 방식을 선택하세요:", ["직접 입력", "엑셀 파일 업로드"])
     
     if input_type == "직접 입력":
         raw_text = st.text_area(
-            "단어를 입력하세요 (한 줄에 여러 개도 OK!)",
+            "단어를 입력하세요 (줄바꿈/한 줄 여러 개 모두 가능)",
             height=250,
             value=""
         )
@@ -29,13 +49,12 @@ with st.sidebar:
                 if not line:
                     continue
                 
-                # '1. provide 21. aim' 처럼 한 줄에 여러 단어가 있는 경우 분리
-                # 숫자. 패턴을 기준으로 단어 나눔
+                # '1. provide 21. aim' 형태 자동 분리
                 items = re.split(r'\s+(?=\d+\.)', line)
                 
                 for item in items:
                     item = item.strip()
-                    # 맨 앞의 번호(예: '1. ', '21. ') 제거
+                    # 앞에 붙은 번호 제거
                     clean_item = re.sub(r'^\d+\.\s*', '', item)
                     
                     if not clean_item:
@@ -88,7 +107,10 @@ tab1, tab2 = st.tabs(["📄 시험지 생성", "📚 단어장 확인"])
 
 with tab2:
     st.subheader("현재 입력된 단어 목록")
-    st.dataframe(st.session_state.words_df, use_container_width=True)
+    # 1번부터 표시
+    df_display = st.session_state.words_df.copy()
+    df_display.index = range(1, len(df_display) + 1)
+    st.dataframe(df_display, use_container_width=True)
 
 with tab1:
     if st.session_state.words_df.empty:
@@ -101,7 +123,7 @@ with tab1:
             answer_data = []
             
             for idx, row in sample_df.iterrows():
-                q_num = idx + 1
+                q_num = idx + 1  # 1번부터 시작되도록 고정
                 eng = row.get("영어 단어", "")
                 kor = row.get("한국어 뜻", "")
                 
@@ -116,14 +138,19 @@ with tab1:
                     quiz_data.append({"번호": q_num, "한국어 뜻": kor, "영어 단어": ""})
                     answer_data.append({"번호": q_num, "정답": f"{kor} - {eng}" if kor else eng})
                     
-            st.session_state.quiz_df = pd.DataFrame(quiz_data)
-            st.session_state.answer_df = pd.DataFrame(answer_data)
+            # 표의 인덱스도 1번부터 표시되도록 설정
+            q_df = pd.DataFrame(quiz_data).set_index("번호")
+            a_df = pd.DataFrame(answer_data).set_index("번호")
+            
+            st.session_state.quiz_df = q_df
+            st.session_state.answer_df = a_df
 
         if "quiz_df" in st.session_state:
             st.markdown("---")
             st.subheader("📝 영어 단어 시험지")
             st.text(f"범위: 전 범위 | 문제 수: {len(st.session_state.quiz_df)}문제 | 점수: ____ / 100")
             
+            # 시험지 출력
             st.table(st.session_state.quiz_df)
             
             st.markdown("---")
