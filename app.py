@@ -5,78 +5,7 @@ import re
 import streamlit.components.v1 as components
 from deep_translator import GoogleTranslator
 
-st.set_page_config(page_title="🌈 알록달록 영어 단어 시험지 제작기", layout="wide")
-
-# --- 알록달록 & 동글동글 파스텔 커스텀 CSS ---
-st.markdown("""
-    <style>
-    /* 전체 배경을 밝고 따뜻한 톤으로 설정 */
-    .stApp {
-        background-color: #FAF8F5 !important;
-    }
-    
-    /* 헤더 타이틀 스타일링 */
-    h1 {
-        color: #6C5CE7 !important;
-        font-family: 'Malgun Gothic', sans-serif;
-        font-weight: 800 !important;
-        background: linear-gradient(120deg, #A8A4FF, #FF7675);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        padding-bottom: 10px;
-    }
-    
-    /* 사이드바 배경 및 테두리 */
-    [data-testid="stSidebar"] {
-        background-color: #FFF0F5 !important;
-        border-right: 2px solid #FFD1DC !important;
-    }
-    
-    /* 동글동글한 파스텔 버튼 스타일링 */
-    .stButton > button {
-        border-radius: 20px !important;
-        background: linear-gradient(135deg, #a8e6cf, #dbede6) !important;
-        color: #2d3436 !important;
-        font-weight: bold !important;
-        border: 2px solid #81ecec !important;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05) !important;
-        transition: all 0.2s ease-in-out !important;
-    }
-    .stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 10px rgba(0, 0, 0, 0.1) !important;
-        background: linear-gradient(135deg, #81ecec, #a8e6cf) !important;
-    }
-    
-    /* 주요 강조 버튼 (랜덤 섞기) */
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #ff8b94, #ffaaa5) !important;
-        color: white !important;
-        border: 2px solid #ff6b6b !important;
-    }
-    
-    /* 탭(Tab) 디자인 동글동글하게 바꾸기 */
-    button[data-baseweb="tab"] {
-        border-radius: 15px 15px 0 0 !important;
-        background-color: #E8F0FE !important;
-        color: #5f27cd !important;
-        font-weight: bold !important;
-        margin-right: 5px !important;
-        padding: 10px 20px !important;
-    }
-    button[aria-selected="true"] {
-        background-color: #FFD1DC !important;
-        color: #d63031 !important;
-    }
-    
-    /* 텍스트 입력 상자 및 라디오 버튼 라운드 */
-    .stTextArea textarea, .stSelectbox select, .stNumberInput input {
-        border-radius: 15px !important;
-        border: 2px solid #74b9ff !important;
-        background-color: #ffffff !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="맞춤형 영어 단어 시험지 제작기", layout="wide")
 
 # 자동 번역 함수
 @st.cache_data(show_spinner=False)
@@ -87,7 +16,7 @@ def translate_word(word):
     except Exception:
         return ""
 
-# 인쇄용 A4 2열 HTML 생성 함수 (화면은 알록달록, 인쇄는 종이절약용 흰/검)
+# 인쇄용 A4 2열 HTML 생성 함수
 def build_print_html(df, title, is_answer=False):
     half = (len(df) + 1) // 2
     col1_df = df.iloc[:half]
@@ -115,8 +44,8 @@ def build_print_html(df, title, is_answer=False):
             body {{
                 font-family: 'Malgun Gothic', sans-serif;
                 margin: 0;
-                padding: 15px;
-                color: #2d3436;
+                padding: 10px;
+                color: #000000;
                 background-color: #ffffff;
             }}
             .header {{
@@ -125,12 +54,11 @@ def build_print_html(df, title, is_answer=False):
             }}
             .header h2 {{
                 margin: 0 0 5px 0;
-                color: #6c5ce7;
             }}
             .info {{
                 text-align: right;
                 font-size: 12px;
-                border-bottom: 2px dashed #a8a4ff;
+                border-bottom: 2px solid #000;
                 padding-bottom: 5px;
                 margin-bottom: 15px;
             }}
@@ -144,54 +72,40 @@ def build_print_html(df, title, is_answer=False):
             table {{
                 width: 100%;
                 border-collapse: collapse;
-                border-radius: 10px;
-                overflow: hidden;
             }}
             th, td {{
-                border: 1px solid #dfe6e9;
-                padding: 7px 10px;
+                border: 1px solid #333;
+                padding: 6px 8px;
                 font-size: 13px;
                 text-align: left;
             }}
             th {{
-                background-color: #ffeaa7;
-                color: #d63031;
+                background-color: #f2f2f2;
                 text-align: center;
             }}
             .num-col {{
                 width: 12%;
                 text-align: center;
-                background-color: #f1f2f6;
-                font-weight: bold;
             }}
             .print-btn {{
-                background: linear-gradient(135deg, #6c5ce7, #a8a4ff);
+                background-color: #4CAF50;
                 color: white;
-                padding: 10px 20px;
+                padding: 8px 16px;
                 border: none;
-                border-radius: 20px;
+                border-radius: 4px;
                 cursor: pointer;
                 font-size: 14px;
-                font-weight: bold;
                 margin-bottom: 15px;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             }}
             @media print {{
                 .print-btn {{
                     display: none !important;
                 }}
-                th {{
-                    background-color: #f2f2f2 !important;
-                    color: #000 !important;
-                }}
-                th, td {{
-                    border: 1px solid #000 !important;
-                }}
             }}
         </style>
     </head>
     <body>
-        <button class="print-btn" onclick="window.print()">🖨️ 예쁘게 인쇄하기 (Ctrl+P)</button>
+        <button class="print-btn" onclick="window.print()">🖨️ 인쇄하기 (Ctrl+P)</button>
         <div class="header">
             <h2>{title}</h2>
         </div>
@@ -227,15 +141,15 @@ if "words_df" not in st.session_state:
 if "current_words_df" not in st.session_state:
     st.session_state.current_words_df = pd.DataFrame(columns=["영어 단어", "한국어 뜻"])
 
-st.title("🌈 알록달록 영어 단어 시험지 제작기")
+st.title("📝 맞춤형 영어 단어 시험지 제작기")
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("✨ 1. 단어 데이터 입력")
+    st.header("1. 단어 데이터 입력")
     input_type = st.radio("입력 방식을 선택하세요:", ["직접 입력 (목록/뜻)", "문장/글귀 통째로 입력", "엑셀 파일 업로드"])
     
     if input_type == "직접 입력 (목록/뜻)":
-        raw_text = st.text_area("단어를 입력하세요 (예: apple - 사과)", height=180, value="")
+        raw_text = st.text_area("단어를 입력하세요 (예: apple - 사과)", height=200, value="")
         if st.button("📥 단어 반영 (중복 시 덮어쓰기)"):
             lines = raw_text.strip().split("\n")
             new_data = []
@@ -274,10 +188,12 @@ with st.sidebar:
                 st.success(f"{len(new_data)}개 단어가 반영되었습니다!")
 
     elif input_type == "문장/글귀 통째로 입력":
-        raw_passage = st.text_area("영어 문장이나 긴 글을 붙여넣으세요", height=180, value="")
+        raw_passage = st.text_area("영어 문장이나 긴 글을 붙여넣으세요", height=200, value="")
         if st.button("✂️ 문장 분해하여 단어장에 추가"):
             if raw_passage.strip():
+                # 영문 알파벳과 하이픈만 추출하여 단어 분해 (소문자 변환)
                 extracted_words = re.findall(r'\b[a-zA-A-Za-z-]+\b', raw_passage)
+                # 알파벳 2자 이상만 필터링 및 중복 제거
                 unique_words = sorted(list(set([w.lower() for w in extracted_words if len(w) > 1])))
                 
                 new_data = []
@@ -290,9 +206,9 @@ with st.sidebar:
                     new_df = pd.DataFrame(new_data)
                     st.session_state.current_words_df = new_df
                     
-                    combined = pd.concat([st.session_state.words_df, new_data], ignore_index=True)
+                    combined = pd.concat([st.session_state.words_df, new_df], ignore_index=True)
                     st.session_state.words_df = combined.drop_duplicates(subset=["영어 단어"], keep="last").reset_index(drop=True)
-                    st.success(f"문장에서 {len(new_data)}개 단어를 추출했습니다!")
+                    st.success(f"문장에서 총 {len(new_data)}개의 단어를 추출하여 저장했습니다!")
             else:
                 st.warning("문장을 입력해 주세요.")
 
@@ -317,7 +233,7 @@ with st.sidebar:
                 st.error("파일을 읽는 중 오류가 발생했습니다.")
 
     st.markdown("---")
-    st.header("⚙️ 2. 시험지 출제 옵션")
+    st.header("2. 시험지 출제 옵션")
     test_target = st.radio("출제할 단어 범위:", ["방금 입력한 단어만", "누적 전체 단어장"])
     test_direction = st.selectbox("시험 방향 선택:", ["영어 → 한국어 (기본)", "한국어 → 영어", "혼합형"])
     
@@ -376,13 +292,13 @@ with tab1:
 
         if "quiz_df" in st.session_state:
             st.markdown("---")
-            st.subheader("📝 영어 단어 시험지 미리보기")
+            st.subheader("📝 영어 단어 시험지 (2열 배치)")
             
             quiz_html = build_print_html(st.session_state.quiz_df, "영어 단어 시험지", is_answer=False)
             components.html(quiz_html, height=600, scrolling=True)
             
             st.markdown("---")
             with st.expander("🔑 정답지 보기 및 인쇄"):
-                st.subheader("🔑 정답지")
+                st.subheader("🔑 정답지 (2열 배치)")
                 ans_html = build_print_html(st.session_state.answer_df, "영어 단어 시험지 정답지", is_answer=True)
                 components.html(ans_html, height=500, scrolling=True)
