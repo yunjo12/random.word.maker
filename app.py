@@ -10,12 +10,10 @@ st.set_page_config(page_title="맞춤형 영어 단어 시험지 제작기", lay
 st.markdown("""
     <style>
     @media print {
-        /* 배경 흰색, 글자 검은색 고정 */
         body, .stApp, div, iframe {
             background-color: #ffffff !important;
             color: #000000 !important;
         }
-        /* 화면상의 UI(사이드바, 버튼, 헤더, 탭) 인쇄시 모두 숨김 */
         [data-testid="stSidebar"], 
         header, 
         footer, 
@@ -28,13 +26,6 @@ st.markdown("""
         .main .block-container {
             padding: 0 !important;
             margin: 0 !important;
-            width: 100% !important;
-        }
-        /* 2열 레이아웃 스타일 설정 */
-        .print-container {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
-            gap: 20px !important;
             width: 100% !important;
         }
         table {
@@ -51,15 +42,6 @@ st.markdown("""
         th {
             background-color: #f2f2f2 !important;
         }
-    }
-    
-    /* 화면용 일반 스타일 */
-    .print-container {
-        display: flex;
-        gap: 20px;
-    }
-    .print-col {
-        flex: 1;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -235,28 +217,23 @@ with tab1:
         if "quiz_df" in st.session_state:
             st.markdown("---")
             st.subheader("📝 영어 단어 시험지 미리보기")
-            st.caption("💡 바로 인쇄(Ctrl + P)를 누르면 A4 종이에 깔끔하게 2열(2줄)로 출력됩니다!")
+            st.caption("💡 Ctrl + P를 누르시면 백지 없이 종이에 깔끔하게 2열(2줄)로 출력됩니다!")
             
-            # 반으로 나누어 2열로 표시
             df_quiz = st.session_state.quiz_df
             half_len = (len(df_quiz) + 1) // 2
             
             col1_df = df_quiz.iloc[:half_len]
             col2_df = df_quiz.iloc[half_len:]
             
-            st.markdown(f"""
-            <div style="font-weight:bold; margin-bottom: 10px;">
-                범위: 전 범위 | 문제 수: {len(df_quiz)}문제 | 점수: ____ / 100
-            </div>
-            <div class="print-container">
-                <div class="print-col">
-                    {col1_df.to_html(escape=False)}
-                </div>
-                <div class="print-col">
-                    {col2_df.to_html(escape=False) if not col2_df.empty else ""}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.text(f"범위: 전 범위 | 문제 수: {len(df_quiz)}문제 | 점수: ____ / 100")
+            
+            # 2열(2줄) 레이아웃
+            col_left, col_right = st.columns(2)
+            with col_left:
+                st.table(col1_df)
+            with col_right:
+                if not col2_df.empty:
+                    st.table(col2_df)
             
             st.markdown("---")
             with st.expander("🔑 정답지 보기"):
@@ -266,8 +243,9 @@ with tab1:
                 ans_col1 = df_ans.iloc[:half_ans_len]
                 ans_col2 = df_ans.iloc[half_ans_len:]
                 
-                st.markdown(f"""
-                <div class="print-container">
-                    <div class="print-col">
-                        {ans_col1.to_html(escape=False)}
-                    </div>
+                ans_left, ans_right = st.columns(2)
+                with ans_left:
+                    st.table(ans_col1)
+                with ans_right:
+                    if not ans_col2.empty:
+                        st.table(ans_col2)
